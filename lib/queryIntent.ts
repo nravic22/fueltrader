@@ -92,6 +92,8 @@ Only extract what the question actually asks for — don't assume a fuel type, b
 If the question is about "near me" / "nearby" / distance without naming a place, and the visitor has shared GPS, set needs_location=true and location_text=null (their GPS will be used).
 If the question names a specific place/postcode to search near, set location_text to that place instead.
 
+Watch for UK place names that are also ordinary English words (e.g. "Reading", "Bath", "Looe", "Wells", "Ryde") — a phrase like "in Reading" or "diesel in Bath" means the TOWN, not the verb/noun. If a capitalized word appears right after "in"/"near"/"at"/"around" and the sentence would otherwise be about finding fuel somewhere, treat it as a place name and set location_text to it, even if that word also has an unrelated everyday meaning.
+
 If the question describes a planned trip/drive between two named places (e.g. "driving from Manchester to Leeds, where should I fill up", "route from X to Y", "on the way from A to B"), treat it as a route query:
 - Set location_text to the start place and destination_text to the end place.
 - Set needs_location=false (a route query never relies on GPS).
