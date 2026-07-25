@@ -189,12 +189,18 @@ export default function MapView({ stations, userLocation, selectedStationId, onS
     }
   }, [userLocation]);
 
-  // Pan to a station when its card is selected from the list.
+  // When a card is selected from the list, keep the overview zoom level —
+  // only pan (never zoom in) if its pin isn't already visible in the current
+  // viewport, so selecting a result doesn't disrupt the "see everything" view.
   useEffect(() => {
     if (!selectedStationId) return;
+    const map = mapRef.current;
     const station = stations.find((s) => s.node_id === selectedStationId);
-    if (station && mapRef.current) {
-      mapRef.current.easeTo({ center: [station.longitude, station.latitude], zoom: Math.max(mapRef.current.getZoom(), 13) });
+    if (!station || !map) return;
+
+    const lngLat: [number, number] = [station.longitude, station.latitude];
+    if (!map.getBounds().contains(lngLat)) {
+      map.easeTo({ center: lngLat });
     }
   }, [selectedStationId, stations]);
 

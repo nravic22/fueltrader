@@ -105,13 +105,24 @@ export async function POST(req: NextRequest) {
     } else if (intent.needs_location && body.userLocation) {
       location = body.userLocation;
     } else if (intent.needs_location && !body.userLocation) {
-      return NextResponse.json(
-        {
-          error: 'This question needs a location. Share your location, or mention a town/postcode in your question.',
-          needsLocation: true,
-        },
-        { status: 400 }
-      );
+      // The LLM occasionally fails to extract a place name it clearly did
+      // mention (a confirmed quirk with some models on certain well-known
+      // city names) — try a cheap regex-based fallback (no extra LLM call)
+      // before giving up and asking the visitor to share their location.
+      const fallbackPlace = extractFallbackPlaceName(query);
+      if (fallbackPlace) {
+        location = await geocode(fallbackPlace);
+      }
+
+      if (!location) {
+        return NextResponse.json(
+          {
+            error: 'This question needs a location. Share your location, or mention a town/postcode in your question.',
+            needsLocation: true,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const results = await runStationQuery(intent, location);
@@ -130,6 +141,15 @@ export async function POST(req: NextRequest) {
     console.error('Query API error:', err);
     return NextResponse.json({ error: 'Something went wrong answering that — please try again.' }, { status: 500 });
   }
+}
+
+// Best-effort, no-LLM-cost fallback for when parseQueryIntent set
+// needs_location=true but failed to extract a place name that IS in the
+// query text (e.g. "near London", "diesel in Preston"). Only ever used as a
+// second attempt after the LLM's own extraction came back empty.
+function extractFallbackPlaceName(query: string): string | null {
+  const match = query.match(/\b(?:near|in|at|around|round)\s+([A-Z][a-zA-Z'-]*(?:\s+[A-Z][a-zA-Z'-]*)*)/);
+  return match ? match[1] : null;
 }
 
 // Only what the LLM actually needs to phrase a summary — the full

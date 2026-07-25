@@ -44,15 +44,15 @@ export const QueryIntentSchema = z.object({
     .nullable()
     .describe(
       'A place name or postcode mentioned in the query to search near, e.g. "Bolton" or "NP4 6JU". ' +
-        'For a planned trip/route query (e.g. "driving from Manchester to Leeds"), this is the trip\'s START/origin place. ' +
+        'For a planned trip/route query (e.g. "driving from Town A to Town B"), this is the trip\'s START/origin place. ' +
         'Null if the visitor\'s own GPS location should be used instead, or if no location is relevant.'
     ),
   destination_text: z
     .string()
     .nullable()
     .describe(
-      'Only set for a planned trip/route query that names both a start and an end place (e.g. "from Manchester to Leeds", ' +
-        '"driving to London, need to fill up on the way", "route from X to Y"). This is the trip\'s END/destination place. ' +
+      'Only set for a planned trip/route query that names both a start and an end place (e.g. "from Town A to Town B", ' +
+        '"driving to Town B, need to fill up on the way", "route from X to Y"). This is the trip\'s END/destination place. ' +
         'Null for any query that is not an A-to-B route (e.g. plain "near me" or "near <place>" searches).'
     ),
   fuel_type: z
@@ -95,7 +95,7 @@ If the question names a specific place/postcode to search near, set location_tex
 
 Watch for UK place names that are also ordinary English words (e.g. "Reading", "Bath", "Looe", "Wells", "Ryde") — a phrase like "in Reading" or "diesel in Bath" means the TOWN, not the verb/noun. If a capitalized word appears right after "in"/"near"/"at"/"around" and the sentence would otherwise be about finding fuel somewhere, treat it as a place name and set location_text to it, even if that word also has an unrelated everyday meaning.
 
-If the question describes a planned trip/drive between two named places (e.g. "driving from Manchester to Leeds, where should I fill up", "route from X to Y", "on the way from A to B"), treat it as a route query:
+If the question describes a planned trip/drive between two named places (e.g. "driving from Town A to Town B, where should I fill up", "route from X to Y", "on the way from A to B"), treat it as a route query:
 - Set location_text to the start place and destination_text to the end place.
 - Set needs_location=false (a route query never relies on GPS).
 - Default radius_miles to about 5 (a tight corridor either side of the route) unless the visitor asks for a different distance.
