@@ -363,6 +363,33 @@ a:focus-visible {
   border-color: #bfe6d1;
 }
 
+/* Mobile-only: jumps straight to the Map tab focused on this result, since
+   the map isn't visible at all while browsing the Results tab. */
+.view-on-map-btn {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .view-on-map-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 10px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--primary);
+    cursor: pointer;
+  }
+
+  .view-on-map-btn:hover {
+    background: var(--bg);
+  }
+}
+
 /* Signature element: the price rendered like a UK forecourt price-board totem */
 .price-board {
   flex-shrink: 0;

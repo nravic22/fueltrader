@@ -20,6 +20,11 @@ export default function HomePage() {
   const [mobileTab, setMobileTab] = useState<MobileTab>('map');
   const [route, setRoute] = useState<RouteInfo | null>(null);
 
+  function handleViewOnMap(nodeId: string) {
+    setSelectedStationId(nodeId);
+    setMobileTab('map');
+  }
+
   function requestLocation() {
     if (!navigator.geolocation) {
       setLocationStatus('denied');
@@ -113,7 +118,12 @@ export default function HomePage() {
           {error && <div className="error-card">{error}</div>}
           {answer && !error && <div className="answer-card">{answer}</div>}
 
-          <ResultsList stations={results} selectedStationId={selectedStationId} onSelectStation={setSelectedStationId} />
+          <ResultsList
+            stations={results}
+            selectedStationId={selectedStationId}
+            onSelectStation={setSelectedStationId}
+            onViewOnMap={handleViewOnMap}
+          />
         </div>
       </div>
     </div>

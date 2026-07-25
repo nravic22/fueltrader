@@ -6,9 +6,10 @@ interface ResultsListProps {
   stations: StationResult[];
   selectedStationId: string | null;
   onSelectStation: (nodeId: string) => void;
+  onViewOnMap: (nodeId: string) => void;
 }
 
-export default function ResultsList({ stations, selectedStationId, onSelectStation }: ResultsListProps) {
+export default function ResultsList({ stations, selectedStationId, onSelectStation, onViewOnMap }: ResultsListProps) {
   if (stations.length === 0) {
     return <div className="empty-state">Ask a question above to see nearby stations and prices here.</div>;
   }
@@ -44,6 +45,16 @@ export default function ResultsList({ stations, selectedStationId, onSelectStati
               {station.has_customer_toilets && <span className="badge">Toilets</span>}
               {station.matched_via_semantic && <span className="badge">🔍 Similar name</span>}
             </div>
+            <button
+              type="button"
+              className="view-on-map-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewOnMap(station.node_id);
+              }}
+            >
+              🗺️ View on map
+            </button>
           </div>
 
           {station.price != null && (
