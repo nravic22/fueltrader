@@ -33,6 +33,7 @@ export default function ResultsList({ stations, selectedStationId, onSelectStati
               {station.address_line_1 ? `${station.address_line_1}, ` : ''}
               {station.city ?? station.county ?? ''}
               {station.distance_miles != null ? ` · ${station.distance_miles.toFixed(1)} mi` : ''}
+              {station.route_position_miles != null ? ` · ${station.route_position_miles.toFixed(0)} mi into trip` : ''}
             </p>
             <div className="station-badges">
               <span className={`badge ${station.is_open_now ? 'is-open' : ''}`}>
@@ -41,11 +42,13 @@ export default function ResultsList({ stations, selectedStationId, onSelectStati
               {station.has_24h_fuel && <span className="badge">24hr fuel</span>}
               {station.has_car_wash && <span className="badge">Car wash</span>}
               {station.has_customer_toilets && <span className="badge">Toilets</span>}
+              {station.matched_via_semantic && <span className="badge">🔍 Similar name</span>}
             </div>
           </div>
 
           {station.price != null && (
             <div className="price-board">
+              <div className="fuel-label">{station.fuel_label}</div>
               <div className="value">{station.price.toFixed(1)}</div>
               <div className="unit">p / litre</div>
             </div>

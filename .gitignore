@@ -15,6 +15,13 @@
 # misc
 .DS_Store
 *.pem
+.dev-quota-state.json
+
+# local chroma vector db data
+.chroma-data
+
+# claude code local tool config/session state
+.claude
 
 # debug
 npm-debug.log*

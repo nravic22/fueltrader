@@ -8,12 +8,17 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "ingest": "node scripts/ingest.mjs"
+    "ingest": "node scripts/ingest.mjs",
+    "embed": "node scripts/embed-stations.mjs"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/google": "^1.2.22",
+    "@ai-sdk/openai": "^1.3.24",
+    "@chroma-core/openai": "^0.1.10",
     "@supabase/supabase-js": "^2.45.0",
     "ai": "^4.0.0",
-    "@ai-sdk/anthropic": "^1.0.0",
+    "chromadb": "^3.5.0",
     "maplibre-gl": "^4.7.0",
     "next": "^15.0.0",
     "react": "^19.0.0",

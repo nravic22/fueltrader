@@ -8,14 +8,25 @@ import type { StationResult } from '@/lib/queryBuilder';
 // Free, unlimited, no-API-key vector tiles — see OpenFreeMap.org.
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/bright';
 
+// Material Symbols "local_gas_station" glyph, used inside each pin badge.
+const FUEL_PUMP_ICON =
+  '<svg viewBox="0 0 24 24" width="65%" height="65%" fill="white"><path d="M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77zM12 9H6V5h6v4zm6 2c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/></svg>';
+
+const ROUTE_SOURCE_ID = 'trip-route';
+
+export interface RouteInfo {
+  coordinates: [number, number][];
+}
+
 interface MapViewProps {
   stations: StationResult[];
   userLocation: { lat: number; lng: number } | null;
   selectedStationId: string | null;
   onSelectStation: (nodeId: string) => void;
+  route?: RouteInfo | null;
 }
 
-export default function MapView({ stations, userLocation, selectedStationId, onSelectStation }: MapViewProps) {
+export default function MapView({ stations, userLocation, selectedStationId, onSelectStation, route }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
@@ -48,7 +59,9 @@ export default function MapView({ stations, userLocation, selectedStationId, onS
     return () => clearTimeout(id);
   }, [isFullscreen]);
 
-  // Sync station markers whenever results change.
+  // Create/replace station markers whenever the result set changes, and fit
+  // the map to show them all. Selection styling is handled by a separate
+  // effect below so clicking a result doesn't re-trigger this fit-to-all.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -62,19 +75,24 @@ export default function MapView({ stations, userLocation, selectedStationId, onS
 
     for (const station of stations) {
       const el = document.createElement('div');
-      el.style.width = '16px';
-      el.style.height = '16px';
+      el.className = 'station-marker';
+      el.style.width = '26px';
+      el.style.height = '26px';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
       el.style.borderRadius = '50%';
-      el.style.background = station.node_id === selectedStationId ? '#ffb000' : '#0b4f6c';
+      el.style.background = '#0b4f6c';
       el.style.border = '2px solid white';
       el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.4)';
       el.style.cursor = 'pointer';
+      el.innerHTML = FUEL_PUMP_ICON;
 
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([station.longitude, station.latitude])
         .setPopup(
           new maplibregl.Popup({ offset: 12 }).setHTML(
-            `<strong>${escapeHtml(station.trading_name)}</strong><br/>${station.price != null ? `${station.price.toFixed(1)}p/L` : ''}`
+            `<strong>${escapeHtml(station.trading_name)}</strong><br/>${station.price != null ? `${station.fuel_label} · ${station.price.toFixed(1)}p/L` : ''}`
           )
         )
         .addTo(map);
@@ -86,9 +104,69 @@ export default function MapView({ stations, userLocation, selectedStationId, onS
     }
 
     if (userLocation) bounds.extend([userLocation.lng, userLocation.lat]);
+    if (route) for (const coord of route.coordinates) bounds.extend(coord as [number, number]);
     map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stations, selectedStationId]);
+  }, [stations, route]);
+
+  // Draw (or clear) the driving route line whenever it changes.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const syncRouteLayer = () => {
+      const existingSource = map.getSource(ROUTE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+
+      if (!route) {
+        if (map.getLayer(ROUTE_SOURCE_ID)) map.removeLayer(ROUTE_SOURCE_ID);
+        if (existingSource) map.removeSource(ROUTE_SOURCE_ID);
+        return;
+      }
+
+      const geojson = {
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates: route.coordinates },
+      };
+
+      if (existingSource) {
+        existingSource.setData(geojson as any);
+      } else {
+        map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson as any });
+        map.addLayer({
+          id: ROUTE_SOURCE_ID,
+          type: 'line',
+          source: ROUTE_SOURCE_ID,
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#1a73e8', 'line-width': 5, 'line-opacity': 0.8 },
+        });
+      }
+    };
+
+    if (map.isStyleLoaded()) syncRouteLayer();
+    else map.once('load', syncRouteLayer);
+  }, [route]);
+
+  // Style + open the popup for whichever marker is currently selected, and
+  // reset the rest — no map movement or marker recreation here, just the
+  // "which pin is focused" visual state.
+  useEffect(() => {
+    for (const [nodeId, marker] of markersRef.current) {
+      const el = marker.getElement();
+      const isSelected = nodeId === selectedStationId;
+      el.style.width = isSelected ? '34px' : '26px';
+      el.style.height = isSelected ? '34px' : '26px';
+      el.style.background = isSelected ? '#ffb000' : '#0b4f6c';
+      el.style.zIndex = isSelected ? '10' : '0';
+
+      const popup = marker.getPopup();
+      if (isSelected) {
+        if (popup && !popup.isOpen()) marker.togglePopup();
+      } else if (popup?.isOpen()) {
+        marker.togglePopup();
+      }
+    }
+  }, [selectedStationId, stations]);
 
   // User's own location marker (distinct blue dot).
   useEffect(() => {

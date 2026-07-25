@@ -17,11 +17,29 @@ declare global {
   }
 }
 
+interface QuotaStatus {
+  tracked: boolean;
+  used?: number;
+  limit?: number;
+  remaining?: number;
+}
+
 export default function QueryBar({ onSubmit, loading, onRequestLocation, locationStatus }: QueryBarProps) {
   const [text, setText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
+  const [quota, setQuota] = useState<QuotaStatus | null>(null);
   const recognitionRef = useRef<any>(null);
+
+  // Dev-only: refresh the self-tracked Google free-tier quota display after
+  // each search, so it's visible how much of today's cap is used up.
+  useEffect(() => {
+    if (loading) return;
+    fetch('/api/quota')
+      .then((res) => res.json())
+      .then(setQuota)
+      .catch(() => {});
+  }, [loading]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -100,6 +118,13 @@ export default function QueryBar({ onSubmit, loading, onRequestLocation, locatio
           {loading ? 'Searching…' : 'Search'}
         </button>
       </div>
+
+      {quota?.tracked && (
+        <p className="quota-status">
+          Dev: {quota.used}/{quota.limit} Gemini requests used today
+          {quota.remaining === 0 ? ' — quota exhausted, resets at midnight PT' : ` (${quota.remaining} left)`}
+        </p>
+      )}
     </form>
   );
 }

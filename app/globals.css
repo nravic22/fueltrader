@@ -77,17 +77,80 @@ a:focus-visible {
   font-size: 14px;
 }
 
+.mobile-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 24px 12px;
+}
+
+.mobile-tab-btn {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.mobile-tab-btn.is-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+@media (min-width: 900px) {
+  .mobile-tabs {
+    display: none;
+  }
+}
+
 .main-grid {
   flex: 1;
   display: grid;
   grid-template-columns: 1fr;
+  grid-template-areas:
+    'map'
+    'query'
+    'answers';
   gap: 16px;
   padding: 0 24px 24px;
+}
+
+/* On mobile, the two tabs above toggle which area is visible: "map" shows
+   the map + query box, "answers" shows the answer/results. Desktop ignores
+   this entirely and shows everything at once (see below). */
+@media (max-width: 899px) {
+  [data-mobile-tab='map'] .answers-pane {
+    display: none;
+  }
+
+  [data-mobile-tab='answers'] .map-column,
+  [data-mobile-tab='answers'] .query-pane {
+    display: none;
+  }
+}
+
+.map-column {
+  grid-area: map;
+  height: 45vh;
+  min-height: 320px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(16, 24, 32, 0.12);
+  position: relative;
 }
 
 @media (min-width: 900px) {
   .main-grid {
     grid-template-columns: minmax(360px, 460px) 1fr;
+    grid-template-areas:
+      'query map'
+      'answers map';
+    grid-template-rows: auto 1fr;
     align-items: start;
   }
 
@@ -98,15 +161,6 @@ a:focus-visible {
   }
 }
 
-.map-column {
-  height: 45vh;
-  min-height: 320px;
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(16, 24, 32, 0.12);
-  position: relative;
-}
-
 .map-column.is-fullscreen {
   position: fixed;
   inset: 0;
@@ -115,7 +169,13 @@ a:focus-visible {
   border-radius: 0;
 }
 
-.results-column {
+.query-pane {
+  grid-area: query;
+  min-width: 0;
+}
+
+.answers-pane {
+  grid-area: answers;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -197,6 +257,14 @@ a:focus-visible {
 .submit-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.quota-status {
+  margin: 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--ink-soft);
+  opacity: 0.75;
 }
 
 .location-row {
@@ -303,6 +371,16 @@ a:focus-visible {
   padding: 8px 10px;
   text-align: center;
   min-width: 74px;
+}
+
+.price-board .fuel-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: #9aa5ad;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
 }
 
 .price-board .value {
