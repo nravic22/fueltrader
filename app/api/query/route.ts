@@ -5,6 +5,7 @@ import { parseQueryIntent } from '@/lib/queryIntent';
 import { runStationQuery, runRouteStationQuery, type StationResult } from '@/lib/queryBuilder';
 import { geocode } from '@/lib/geocode';
 import { getDrivingRoute, metersToMiles } from '@/lib/route';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +16,17 @@ interface RequestBody {
 
 export async function POST(req: NextRequest) {
   try {
+    // Guards against token/cost abuse — a burst limit plus a daily cap per
+    // IP. No-ops (always allows) if Upstash isn't configured, e.g. local dev.
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    const rateLimit = await checkRateLimit(ip);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: rateLimit.message ?? 'Too many requests — please try again shortly.' },
+        { status: 429, headers: rateLimit.retryAfterSeconds ? { 'Retry-After': String(rateLimit.retryAfterSeconds) } : undefined }
+      );
+    }
+
     const body = (await req.json()) as RequestBody;
     const query = (body.query ?? '').trim();
 
@@ -120,6 +132,23 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Only what the LLM actually needs to phrase a summary — the full
+// StationResult also carries a 64-char node_id, full address, and a nested
+// per-weekday opening_hours object, none of which help write 2-3 sentences,
+// but all of which cost input tokens on every single request.
+function toSummaryRow(r: StationResult) {
+  return {
+    name: r.trading_name,
+    brand: r.brand_name,
+    price: r.price,
+    fuel: r.fuel_label,
+    distance_mi: r.distance_miles != null ? Math.round(r.distance_miles * 10) / 10 : null,
+    route_position_mi: r.route_position_miles != null ? Math.round(r.route_position_miles) : undefined,
+    open_now: r.is_open_now,
+    similar_name_match: r.matched_via_semantic || undefined,
+  };
+}
+
 async function summarizeResults(
   userQuery: string,
   results: StationResult[],
@@ -132,10 +161,15 @@ async function summarizeResults(
       ? `\n\nNote: ${semanticMatchCount} of these results matched "${brandNameQueried}" by similar/approximate name (e.g. a slightly different spelling or store format), not an exact name match — briefly mention this so the visitor understands why those names look a bit different.`
       : '';
 
+  const summaryRows = results.slice(0, routeContext ? 15 : 10).map(toSummaryRow);
+
   // The LLM only formats the answer here — it never invents the numbers.
   // The actual prices/distances came straight from the SQL query above.
+  // maxTokens keeps the (more expensive, per-token) output bounded — the
+  // system prompt already asks for 2-3 sentences, this just enforces it.
   const { text } = await generateText({
     model: getLLMModel(),
+    maxTokens: 200,
     system: routeContext
       ? 'You summarize fuel stations found along a planned UK driving route, in 2-3 friendly, concise sentences. ' +
         'Only use the exact figures given to you — never estimate or round in a way that changes the number. ' +
@@ -144,8 +178,8 @@ async function summarizeResults(
         'Only use the exact figures given to you — never estimate or round in a way that changes the number. ' +
         'Mention the top result by name and price/distance as appropriate, and note how many total results were found.',
     prompt: routeContext
-      ? `Visitor is planning a ${routeContext.totalMiles.toFixed(0)}-mile drive from ${routeContext.origin} to ${routeContext.destination} and asked: "${userQuery}"\n\nStations found along the route, ordered start to end (route_position_miles is how far into the trip each one is):\n${JSON.stringify(results.slice(0, 15), null, 2)}${semanticNote}`
-      : `Visitor asked: "${userQuery}"\n\nResults (already sorted):\n${JSON.stringify(results.slice(0, 10), null, 2)}${semanticNote}`,
+      ? `Visitor is planning a ${routeContext.totalMiles.toFixed(0)}-mile drive from ${routeContext.origin} to ${routeContext.destination} and asked: "${userQuery}"\n\nStations found along the route, ordered start to end (route_position_mi is how far into the trip each one is):\n${JSON.stringify(summaryRows)}${semanticNote}`
+      : `Visitor asked: "${userQuery}"\n\nResults (already sorted):\n${JSON.stringify(summaryRows)}${semanticNote}`,
   });
 
   return text;

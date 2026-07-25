@@ -85,6 +85,7 @@ export async function parseQueryIntent(userQuery: string, hasGpsLocation: boolea
   const { object } = await generateObject({
     model: getLLMModel(),
     schema: QueryIntentSchema,
+    maxTokens: 500, // the schema is small; this just bounds worst-case output, not a real constraint
     system: `You convert a visitor's natural-language question about UK fuel stations into structured search parameters.
 Current UK time: ${ukTimeString}.
 The visitor ${hasGpsLocation ? 'HAS' : 'has NOT'} shared their GPS location.

@@ -75,6 +75,9 @@ never a silent guess.
   the map, query box, and results don't all fight for the same screen.
 - **Voice input**, **fullscreen map**, click-to-focus on a result to pan/
   highlight its pin on the map.
+- **Rate limiting**: per-IP burst + daily caps on `/api/query` (see below),
+  plus explicit output-token caps on both LLM calls, to bound worst-case
+  token/cost exposure from abuse.
 
 ## Setup
 
@@ -165,6 +168,27 @@ local `.dev-quota-state.json` file, since Google's API exposes no "remaining
 quota" endpoint — treat it as a lower bound, not ground truth). Not shown for
 other providers, and not meaningful in production.
 
+## Rate limiting & token/cost abuse protection
+
+`/api/query` is guarded by `lib/rateLimit.ts`: a burst limit (10 requests/min)
+and a daily cap (100 requests/day), both per IP, backed by
+[Upstash Redis](https://upstash.com/redis) (works correctly across Vercel's
+stateless serverless invocations, unlike an in-memory counter). Set
+`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` (free tier available)
+to enable it — without them, rate limiting is skipped entirely (fine for
+local dev, **not recommended in production**).
+
+This is on top of two other guards against runaway token spend:
+- `query.length > 500` — bounds input tokens from the query text itself.
+- `maxTokens` set explicitly on both LLM calls (`parseQueryIntent`,
+  `summarizeResults`) — output tokens are priced higher than input on most
+  providers, so this bounds the more expensive side even if a crafted input
+  tries to elicit a long response.
+
+As a final backstop with no code involved, set a hard monthly spend cap in
+your LLM provider's billing dashboard (OpenAI/Anthropic/Google AI Studio all
+support this) — cheap insurance in case the above is ever bypassed.
+
 ## Known limitations / next steps
 
 - **No GitHub Actions workflow yet** — `scripts/ingest.mjs` and
@@ -177,7 +201,5 @@ other providers, and not meaningful in production.
 - Route directions use OSRM's public demo server, similarly rate-limited and
   not guaranteed for production — swap for a paid routing API (Mapbox
   Directions, GraphHopper, ORS) if traffic grows.
-- No rate limiting or abuse protection is wired in yet on `/api/query` —
-  worth adding (per-IP + daily cap) before any public launch.
 - The upstream CSV source URL is a placeholder — replace with the actual
   feed once confirmed.
