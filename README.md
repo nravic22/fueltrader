@@ -1,5 +1,7 @@
 # Fuel Trader
 
+**Live**: [fueltrader.vercel.app](https://fueltrader.vercel.app)
+
 A RAG-style app that answers natural-language questions about UK fuel prices
 ("cheapest E10 near me that's open now", "cheapest fuel stops from Manchester
 to Leeds") by running structured queries against a Postgres/PostGIS database,
@@ -114,10 +116,18 @@ npm run embed                               # embeds all stations into it
 ```
 
 For a deployed/serverless environment (Vercel can't run a local `chroma run`
-process), use [Chroma Cloud](https://trychroma.com/signup) instead: set
-`CHROMA_API_KEY`, `CHROMA_TENANT`, `CHROMA_DATABASE` in `.env.local`/Vercel,
-then re-run `npm run embed` once with those set to populate the cloud
-collection (it auto-detects Cloud vs local from those env vars).
+process), use [Chroma Cloud](https://trychroma.com/signup) instead. Easiest
+via the CLI (bundled with the `chromadb` npm package already installed):
+
+```bash
+npx chroma login                            # opens a browser to sign in/sign up
+npx chroma db create fueltrader
+npx chroma db connect fueltrader --env-vars # prints CHROMA_API_KEY/CHROMA_TENANT/CHROMA_DATABASE
+```
+
+Add those three to `.env.local`/Vercel, then re-run `npm run embed` once with
+them set to populate the cloud collection (it auto-detects Cloud vs local
+from those env vars — see `lib/chroma.ts`).
 
 ### 4. Local development
 
@@ -138,12 +148,21 @@ limitations.
 
 ### 6. Deploy to Vercel
 
-1. Import this repository at [vercel.com/new](https://vercel.com/new).
-2. Add the same env vars as step 2 (and Chroma Cloud vars from step 3) in the
-   Vercel project settings.
-3. Deploy. Note Vercel's Hobby (free) tier restricts commercial use and
-   caps serverless function duration — check current limits at
-   vercel.com/pricing if this becomes a production/commercial deployment.
+Either import at [vercel.com/new](https://vercel.com/new) and add the env
+vars in the project settings UI, or via CLI:
+
+```bash
+npx vercel link --yes
+npx vercel env add SUPABASE_URL production          # repeat per var (see .env.example) —
+                                                       # skip SUPABASE_SERVICE_ROLE_KEY, that
+                                                       # never goes to the deployed app
+npx vercel --prod --yes
+```
+
+Linking also connects the GitHub repo, so future pushes to `main` auto-deploy.
+Note Vercel's Hobby (free) tier restricts commercial use and caps serverless
+function duration — check current limits at vercel.com/pricing if this
+becomes a production/commercial deployment.
 
 ## Map provider
 
@@ -173,10 +192,19 @@ other providers, and not meaningful in production.
 `/api/query` is guarded by `lib/rateLimit.ts`: a burst limit (10 requests/min)
 and a daily cap (100 requests/day), both per IP, backed by
 [Upstash Redis](https://upstash.com/redis) (works correctly across Vercel's
-stateless serverless invocations, unlike an in-memory counter). Set
-`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` (free tier available)
-to enable it — without them, rate limiting is skipped entirely (fine for
-local dev, **not recommended in production**).
+stateless serverless invocations, unlike an in-memory counter). Free tier via
+the CLI:
+
+```bash
+npx @upstash/cli login
+npx @upstash/cli redis create --name fueltrader --region eu-west-2
+npx @upstash/cli redis list   # grab endpoint + rest_token from the output
+```
+
+Set `UPSTASH_REDIS_REST_URL=https://<endpoint>` and
+`UPSTASH_REDIS_REST_TOKEN=<rest_token>` in `.env.local`/Vercel to enable it —
+without them, rate limiting is skipped entirely (fine for local dev, **not
+recommended in production**).
 
 This is on top of two other guards against runaway token spend:
 - `query.length > 500` — bounds input tokens from the query text itself.
