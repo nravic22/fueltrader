@@ -52,6 +52,11 @@ INGESTION  (offline, scheduled — GitHub Actions workflow not yet wired)
 QUERY TIME  (per visitor request — fast, cheap; reads the stores built above)
 
 ┌────────────────────────────────────────────────────────────────────────────────────┐
+│ HTTP BASIC AUTH (middleware.ts) — gates every route, checked before anything else  │
+└────────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
 │            CLIENT (browser) — Next.js UI, MapLibre GL map, voice input             │
 └────────────────────────────────────────────────────────────────────────────────────┘
                                            │
@@ -235,6 +240,19 @@ how many of today's free-tier requests have been used (self-tracked in a
 local `.dev-quota-state.json` file, since Google's API exposes no "remaining
 quota" endpoint — treat it as a lower bound, not ground truth). Not shown for
 other providers, and not meaningful in production.
+
+## Site access (HTTP Basic Auth)
+
+Every route — pages and `/api/*` alike — sits behind a single shared
+username/password, enforced in `middleware.ts` before any other code runs
+(including rate limiting and the LLM calls, so an unauthenticated request
+never reaches them). The browser handles the login prompt natively; there's
+no app-level login UI or session/cookie involved.
+
+Set `SITE_BASIC_AUTH_USER` and `SITE_BASIC_AUTH_PASSWORD` in `.env.local`/
+Vercel to enable it — leave both blank to disable (no auth at all, e.g. local
+dev). Comparison is timing-safe (constant-time, not a plain `===`) to avoid
+leaking the password one character at a time via response-time differences.
 
 ## Rate limiting & token/cost abuse protection
 
