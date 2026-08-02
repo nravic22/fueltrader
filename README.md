@@ -16,27 +16,76 @@ refresh.
 
 ## Architecture
 
+The app is two decoupled layers: an offline ingestion pipeline that fills the
+data stores, and a live query path (client → API → LLM/SQL → back to client)
+that only ever reads from them.
+
 ```
-CSV feed (updated periodically)
-        │
-        ▼ (intended: GitHub Actions, scheduled — see Known limitations)
-scripts/ingest.mjs  ──►  Supabase (Postgres + PostGIS)
-scripts/embed-stations.mjs  ──►  Chroma (station name/brand embeddings)
-                                │
-                                ▼ (only on user query — fast, cheap)
-Visitor question ──► app/api/query/route.ts
-                        │
-                        ├─ 1. parseQueryIntent()      — LLM extracts structured search params,
-                        │                               incl. whether it's an A-to-B route query
-                        ├─ 2a. geocode() if needed     — free Nominatim lookup for place names
-                        ├─ 2b. getDrivingRoute()       — free OSRM route, only for A-to-B queries
-                        ├─ 3. runStationQuery() /
-                        │    runRouteStationQuery()    — real SQL query (never embeddings for
-                        │                                price/distance — see exception below)
-                        └─ 4. summarizeResults()       — LLM phrases the *actual* returned rows
-                                │
-                                ▼
-                    { answer, results[], route? } ──► map + details list
+INGESTION  (offline, scheduled — GitHub Actions workflow not yet wired)
+
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                          CSV feed (updated periodically)                           │
+└────────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                                 scripts/ingest.mjs                                 │
+└────────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│         SUPABASE (Postgres + PostGIS) — stations table, nearby_stations()          │
+└────────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│            scripts/embed-stations.mjs   (reads Supabase, writes Chroma)            │
+└────────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│          CHROMADB — station name/brand embeddings (semantic brand match)           │
+└────────────────────────────────────────────────────────────────────────────────────┘
+
+
+──────────────────────────────────────────────────────────────────────────────────────
+QUERY TIME  (per visitor request — fast, cheap; reads the stores built above)
+
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│            CLIENT (browser) — Next.js UI, MapLibre GL map, voice input             │
+└────────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                            API — app/api/query/route.ts                            │
+│                                                                                    │
+│         GUARDRAILS: Upstash Redis rate limit (10/min burst, 100/day/IP) ·          │
+│           query length cap (500 chars) · maxTokens cap on both LLM calls           │
+└────────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│ QUERY PIPELINE  (inside route.ts)                                                  │
+│                                                                                    │
+│ 1. parseQueryIntent()        structured search params + is-it-A-to-B?              │
+│ 2a. geocode() if needed      2b. getDrivingRoute() (A-to-B queries only)           │
+│ 3. runStationQuery() / runRouteStationQuery()                                      │
+│      → SQL against Supabase, unioned with Chroma semantic brand match              │
+│ 4. summarizeResults()        LLM phrases the *actual* returned rows                │
+└────────────────────────────────────────────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌───────────────────────────────────────┐    ┌───────────────────────────────────────┐
+│       LLM PROVIDER (switchable)       │    │        EXTERNAL FREE SERVICES         │
+│                                       │    │                                       │
+│       Gemini / Claude / OpenAI        │    │         Nominatim (geocode) +         │
+│             — steps 1 & 4             │    │         OSRM (route) — 2a/2b          │
+└───────────────────────────────────────┘    └───────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                { answer, results[], route? }  →  results list + map                │
+└────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Why structured, not vector, RAG
